@@ -3,6 +3,7 @@
 Created on Tue Oct 29 23:41:12 2019
 
 @author: fredc
+generate figures for impedance vs frequency and detect its resonance and cutoff frequency
 """
 
 
