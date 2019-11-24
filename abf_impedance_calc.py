@@ -17,6 +17,7 @@ import yaml
 
 
 def moving_average(x,window_size):
+    #moving average across data x within a window_size
     half_window_size=int(window_size/2)
     time_len=len(x)
     moving_average_trace=[]
@@ -34,6 +35,7 @@ def moving_average(x,window_size):
     return np.asarray(moving_average_trace)
 
 def get_yaml_config_params():
+    #select yaml file and load all parameters
     F = FileDialog()
     fname = F.getOpenFileName(caption='Select a Config File')[0]
     #load yaml params files
@@ -42,6 +44,7 @@ def get_yaml_config_params():
         
     return params
 def plot_impedance_trace(imp,freq,moving_avg_wind):
+    #generate impedance trace over frequency with peak and cutoff frequency detection
     plt.figure()
     plt.plot(freq,imp)
     moving_average_trace=moving_average(imp,moving_avg_wind)
@@ -150,6 +153,7 @@ for fname in file_list:
 #plot median of the impedance
 median_impedance_trace=0
 if to_average:
+    #for averaging all impedance trace and plot it on a single figure
     count=0
     for impedance_array in impedance_file_array:
         impednace_array=np.asarray(impedance_array)
@@ -160,6 +164,8 @@ if to_average:
     plot_impedance_trace(median_impedance_trace/count,ref_freq,moving_avg_wind)
 
 else:
+    #for plotting all individual traces in separate figures
+
     for impedance_array in impedance_file_array:
         for impedance in impedance_array:
             plot_impedance_trace(impedance,ref_freq,moving_avg_wind)
