@@ -1,0 +1,8 @@
+#user defined input: folder containing all the data for certain recording setting 
+data_file_path: 'C:\Users\fredc\Documents\homeira\HomeiraZAP.Data\Layer 5. ZAP function.Raw data\Sub threshold, hold RMP'
+#ignore the rest for now
+root_result_folder:  'result'
+to_average: False
+sweep_end_freq: 20
+moving_avg_wind: 80
+
