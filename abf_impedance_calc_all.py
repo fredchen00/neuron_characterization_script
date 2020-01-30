@@ -138,7 +138,7 @@ def cal_imp(abf,sweep_end_freq):
 #    hamming_window=gaussian(len(time), std=len(time)/2)
     #count the number of data sets in one folder and segment data accordingly
     sweepList=abf.sweepList 
-    sweepTimesSec=abf.sweepTimesSec
+    sweepTimesSec=np.asarray(sweepList)*abf.sweepLengthSec
     
     voltage_array=[]
     current_array=[]
@@ -178,7 +178,7 @@ def cal_imp(abf,sweep_end_freq):
         
         f_v=interp1d(freq[selected_freq],sp_V[selected_freq])
         f_i=interp1d(freq[selected_freq],sp_I[selected_freq])
-        f_imp=interp1d(freq[selected_freq],impedance)
+        f_imp=interp1d(freq[selected_freq],impedance,fill_value="extrapolate")
         interpolated_trace=f_imp(ref_freq)
         impedance_array.append(interpolated_trace)
 #        plt.figure()
