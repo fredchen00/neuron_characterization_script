@@ -1,0 +1,7 @@
+data_file_path: 'C:\Users\fredc\Documents\homeira\test32'
+root_result_folder:  'result'
+sweep_end_freq: 20
+moving_avg_wind: 41
+is_resonance_filter: False
+sharpness_thr: 0
+filtered_method: 1

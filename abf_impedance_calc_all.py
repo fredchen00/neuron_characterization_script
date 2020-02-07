@@ -16,6 +16,14 @@ from scipy.interpolate import interp1d
 from scipy.signal import gaussian 
 import yaml
 import pandas as  pd
+from scipy.signal import savgol_filter
+
+def subsample_average(x, width):
+
+    """Downsamples x by averaging `width` points"""
+    avg = np.nanmean(x.reshape(-1, width), axis=1)
+    return avg
+
 
 def moving_average(x,window_size):
     #moving average across data x within a window_size
@@ -44,71 +52,79 @@ def get_yaml_config_params():
         
     return params
 
-def plot_trace(imp,freq,moving_avg_wind,time,voltage,current,fig_idx,save_path):
+def plot_trace(imp,freq,moving_avg_wind,time,voltage,current,sharpness_thr,filtered_method,fig_idx,save_path):
     
     plt.figure(figsize=(20,20))
     plt.subplot(3, 1, 1)
-    cen_freq,freq_3db=plot_impedance_trace(imp,freq,moving_avg_wind,fig_idx)
+    cen_freq,freq_3db,res_sharpness=plot_impedance_trace(imp,freq,moving_avg_wind,fig_idx,sharpness_thr,filtered_method)
     
     #plot voltage and current time trace
     plt.subplot(3, 1, 2)
     plt.plot(time, voltage*1e3)
-    plt.title('Voltage Response')
+
     plt.ylabel('Voltage (mV)')
     
     plt.subplot(3, 1, 3)
     plt.plot(time, current*1e12)
     plt.xlabel('time (s)')
-    plt.title('Current Stimulation')
     plt.ylabel('Current(pA)')
 
     plt.savefig(save_path+str(fig_idx)+'.png')
     plt.close()
     
     
-    return cen_freq,freq_3db
+    return cen_freq,freq_3db,res_sharpness
     
     
     
-def plot_impedance_trace(imp,freq,moving_avg_wind,fig_idx):
+def plot_impedance_trace(imp,freq,moving_avg_wind,fig_idx,sharpness_thr,filtered_method):
     #generate impedance trace over frequency with peak and cutoff frequency detection
     imp=imp/1e6
     plt.plot(freq,imp)
     
     prominence_factor=1.01
-    moving_average_trace=moving_average(imp,moving_avg_wind)
-    plt.plot(freq,moving_average_trace)
+    if filtered_method==1:
+       filtered_imp=moving_average(imp,moving_avg_wind)
+    elif filtered_method==2:
+       start_idx=np.argmin(freq-0.5)
+       freq=freq[start_idx:]
+       imp=imp[start_idx:]
+       filtered_imp=moving_average(imp,moving_avg_wind)
+
+#    filtered_imp = savgol_filter(imp, moving_avg_wind, 1)
+    plt.plot(freq,filtered_imp)
     plt.ylim([np.min(imp)*0.9,np.max(imp)*1.1])
-    idx_max_mag=np.argmax(moving_average_trace)
+    idx_max_mag=np.argmax(filtered_imp)
     cen_freq=freq[idx_max_mag]
-    
 
+    
+    left_imp_mean=np.median(filtered_imp[0:idx_max_mag-1])
+    right_imp_mean=np.median(filtered_imp[idx_max_mag+1:])
+    max_imp=filtered_imp[idx_max_mag]
+    
+    if (left_imp_mean*prominence_factor)>max_imp  or  (right_imp_mean*prominence_factor)>max_imp or cen_freq<0.5 :
+        cen_freq=0  
         
-        
-    #find cutoff freq(3dB below max)
-    mag_3db=(np.max(moving_average_trace)/np.sqrt(2))
-    freq_3db_array=freq[np.nonzero(moving_average_trace<mag_3db)]
-#    print(freq_3db_array)
-    if (len(np.nonzero(freq_3db_array>cen_freq)[0])>0):
-        freq_3db=freq_3db_array[np.nonzero(freq_3db_array>cen_freq)[0][0]]
+    if cen_freq>0:
+        res_sharpness=max_imp/filtered_imp[np.argmin(freq-0.5)]
     else:
-        freq_3db=None
-    
-    left_imp_mean=np.median(moving_average_trace[0:idx_max_mag-1])
-    right_imp_mean=np.median(moving_average_trace[idx_max_mag+1:])
-    max_ampl=moving_average_trace[idx_max_mag]
-    
-    
-    
-    if (left_imp_mean*prominence_factor)>max_ampl  or  (right_imp_mean*prominence_factor)>max_ampl or cen_freq<0.5:
-        cen_freq=0        
-    
-
+        res_sharpness=0
+        
+    if sharpness_thr>res_sharpness:
+        cen_freq=0  
+    #find cutoff freq(3dB below max)
+    if cen_freq>0:
+        i_3db_cutoff=np.argmin(abs(filtered_imp-max_imp/np.sqrt(2)))
+        freq_3db=freq[i_3db_cutoff]
+    else:
+        freq_3db=0
+        
+        
     plt.xlabel('Frequency[Hz]')
     plt.ylabel('Impedance[MOhms]')
     if cen_freq is not None:
         if freq_3db is not None:
-            plt.title('Trial {fig_idx}, '.format(fig_idx=fig_idx)+'Fr={:.2f} Hz, Cutoff Freq={:.2f}Hz'.format(cen_freq,freq_3db))
+            plt.title('Trial {fig_idx}, '.format(fig_idx=fig_idx)+'Fr={:.2f} Hz, Cutoff Freq={:.2f}Hz, Sharpness={:.2f}'.format(cen_freq,freq_3db,res_sharpness))
         else:
             plt.title('Trial {fig_idx}, '.format(fig_idx=fig_idx)+'Fr={:.2f} Hz, Cutoff Freq=None'.format(cen_freq))
     else:
@@ -116,7 +132,7 @@ def plot_impedance_trace(imp,freq,moving_avg_wind,fig_idx):
     plt.legend(['Raw Trace','Moving Averaged'])
     
     
-    return cen_freq,freq_3db
+    return cen_freq,freq_3db,res_sharpness
 
      
 def cal_imp(abf,sweep_end_freq):
@@ -124,7 +140,7 @@ def cal_imp(abf,sweep_end_freq):
     recorded_var=abf.data
     dataRate=abf.dataRate
     total_time=np.arange(0,recorded_var.shape[1])/dataRate
-    
+    n_sample=10000
     adcUnits=abf.adcUnits
     #find the corresponding index for voltage and current in data
     current_idx=1
@@ -139,7 +155,6 @@ def cal_imp(abf,sweep_end_freq):
     #count the number of data sets in one folder and segment data accordingly
     sweepList=abf.sweepList 
     sweepTimesSec=np.asarray(sweepList)*abf.sweepLengthSec
-    
     voltage_array=[]
     current_array=[]
     time_array=[]
@@ -154,12 +169,18 @@ def cal_imp(abf,sweep_end_freq):
             
             
         voltage=recorded_var[voltage_idx,start_idx:end_idx]*1e-3
-        voltage_detrend=voltage-np.mean(voltage)
+        N=voltage.shape[0]
+        width = int(N / n_sample)
+        pad = int(width*np.ceil(N/width) - N)
+        
+        
+        voltage_detrend=subsample_average(np.pad(voltage, (pad,0), 'constant', constant_values=np.nan), width)
         current=recorded_var[current_idx,start_idx:end_idx]*1e-12
-        current_detrend=current-np.mean(current)
-        voltage_array.append(voltage)
-        current_array.append(current)
+        current_detrend=subsample_average(np.pad(current, (pad,0), 'constant', constant_values=np.nan), width)
+        voltage_array.append(voltage_detrend)
+        current_array.append(current_detrend)
         time=total_time[start_idx:end_idx]-total_time[start_idx]
+        time=time[::width]
         time_array.append(time)
         #FFT on voltage and current
         sp_V= np.fft.fft(voltage_detrend)
@@ -171,10 +192,10 @@ def cal_imp(abf,sweep_end_freq):
         
         #discard frequency above 20Hz and negative frequency
         freq=freq[1:half_freq]
-        sp_V=np.abs(sp_V[1:half_freq])
-        sp_I=np.abs(sp_I[1:half_freq])
+        sp_V=sp_V[1:half_freq]
+        sp_I=sp_I[1:half_freq]
         selected_freq=freq<21
-        impedance=sp_V[selected_freq]/sp_I[selected_freq]
+        impedance=np.abs(sp_V[selected_freq]/sp_I[selected_freq])
         
         f_v=interp1d(freq[selected_freq],sp_V[selected_freq])
         f_i=interp1d(freq[selected_freq],sp_I[selected_freq])
@@ -195,10 +216,15 @@ def cal_imp(abf,sweep_end_freq):
 #place all abf files in a directory, specify the path in the yaml config file
 params=get_yaml_config_params()
 data_file_path=params['data_file_path']
-to_average=params['to_average']
 sweep_end_freq=params['sweep_end_freq']
 moving_avg_wind=params['moving_avg_wind']
 root_result_folder=params['root_result_folder']
+is_sharpness_filter=params['is_resonance_filter']
+sharpness_thr=params['sharpness_thr']
+filtered_method=params['filtered_method']
+
+if not(is_sharpness_filter):
+    is_sharpness_filter=0
 
 root_result_path=os.path.join(data_file_path,root_result_folder)
 #generating directory to save results
@@ -258,16 +284,17 @@ for folder_path in folder_list:
                         imped_fig_path=os.path.join(root_imped_fig_path,cell_ID)
                         if not(os.path.exists(imped_fig_path)):
                             os.mkdir(imped_fig_path)
+                        cen_freq,freq_3db,res_sharpness=plot_trace(impedance,ref_freq,moving_avg_wind,time_array[trial_idx],voltage_array[trial_idx],current_array[trial_idx],sharpness_thr,filtered_method,
+                                                                   trial_idx,os.path.join(imped_fig_path,abf_name))
                         
-                        cen_freq,freq_3db=plot_trace(impedance,ref_freq,moving_avg_wind,time_array[trial_idx],voltage_array[trial_idx],current_array[trial_idx],trial_idx,os.path.join(imped_fig_path,abf_name))
                         
-                        
-                        df=df.append({'trial':trial_idx,'center_freq':cen_freq,'3dB_freq':freq_3db},ignore_index=True)
+                        df=df.append({'trial':trial_idx,'center_freq':cen_freq,'3dB_freq':freq_3db,'res_sharpness':res_sharpness},ignore_index=True)
                         
         impedance_all=np.concatenate(impedance_all)
         impedance_mean=np.median(impedance_all,axis=0)
-        cen_freq,freq_3db=plot_trace(impedance_mean,ref_freq,moving_avg_wind,time_array[0],np.zeros((time_array[0].shape[0],)),np.zeros((time_array[0].shape[0],)),-1,os.path.join(imped_fig_path,'avg'))
-        df=df.append({'trial':'avg','center_freq':cen_freq,'3dB_freq':freq_3db},ignore_index=True)
+        cen_freq,freq_3db,res_sharpness=plot_trace(impedance_mean,ref_freq,moving_avg_wind,time_array[0],np.zeros((time_array[0].shape[0],)),np.zeros((time_array[0].shape[0],)),sharpness_thr,
+                                                   filtered_method,-1,os.path.join(imped_fig_path,'avg'))
+        df=df.append({'trial':'avg','center_freq':cen_freq,'3dB_freq':freq_3db,'res_sharpness':res_sharpness},ignore_index=True)
         df.set_index('trial')
 
         df_array.append([df,folder_name])
