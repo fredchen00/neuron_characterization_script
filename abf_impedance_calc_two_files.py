@@ -56,7 +56,7 @@ def plot_trace(imp,freq,moving_avg_wind,time,voltage,current,sharpness_thr,filte
     
     plt.figure(figsize=(20,20))
     plt.subplot(3, 1, 1)
-    cen_freq,freq_3db,res_sharpness=plot_impedance_trace(imp,freq,moving_avg_wind,fig_idx,sharpness_thr,filtered_method)
+    cen_freq,freq_3db,res_sharpness=plot_impedance_trace(imp,freq,moving_avg_wind,fig_idx,sharpness_thr,filtered_method,True)
     
     #plot voltage and current time trace
     plt.subplot(3, 1, 2)
@@ -77,10 +77,11 @@ def plot_trace(imp,freq,moving_avg_wind,time,voltage,current,sharpness_thr,filte
     
     
     
-def plot_impedance_trace(imp,freq,moving_avg_wind,fig_idx,sharpness_thr,filtered_method):
+def plot_impedance_trace(imp,freq,moving_avg_wind,fig_idx,sharpness_thr,filtered_method,plot_raw):
     #generate impedance trace over frequency with peak and cutoff frequency detection
     imp=imp/1e6
-    plt.plot(freq,imp)
+    if plot_raw:
+        plt.plot(freq,imp)
     
     prominence_factor=1.01
     if filtered_method==1:
@@ -257,6 +258,8 @@ i_file_array=[]
 
 index=['trial','center_freq','3dB_freq']
 df_array=[]
+impedance_mean_array=[]
+ref_freq_array=[]
 datacount=0
 for folder_path in folder_list:
     file_list=os.listdir(folder_path)
@@ -292,14 +295,29 @@ for folder_path in folder_list:
                         
         impedance_all=np.concatenate(impedance_all)
         impedance_mean=np.median(impedance_all,axis=0)
+        impedance_mean_array.append(impedance_mean)
+        ref_freq_array.append(ref_freq)
         cen_freq,freq_3db,res_sharpness=plot_trace(impedance_mean,ref_freq,moving_avg_wind,time_array[0],np.zeros((time_array[0].shape[0],)),np.zeros((time_array[0].shape[0],)),sharpness_thr,
                                                    filtered_method,-1,os.path.join(imped_fig_path,'avg'))
+        
+        
+        
         df=df.append({'trial':'avg','center_freq':cen_freq,'3dB_freq':freq_3db,'res_sharpness':res_sharpness},ignore_index=True)
         df.set_index('trial')
 
         df_array.append([df,folder_name])
-        
-        
+
+plt.figure()
+max_val=0
+for i in range(len(impedance_mean_array)):
+    impedance_mean=impedance_mean_array[i]
+    ref_freq=ref_freq_array[i]
+    plot_impedance_trace(impedance_mean,ref_freq,moving_avg_wind,0,sharpness_thr,filtered_method,False)
+    max_val=max(max_val,np.max(impedance_mean))
+plt.gca().set_ylim(top=max_val/1e6)
+plt.legend(['Resonance','No Resonance'])
+
+    
         
 with pd.ExcelWriter(os.path.join(root_imped_fig_path,'impedance_info.xlsx'), engine='xlsxwriter') as writer:
     for i in range(len(df_array)):
