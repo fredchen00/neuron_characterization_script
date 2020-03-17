@@ -309,12 +309,22 @@ for folder_path in folder_list:
 
 plt.figure()
 max_val=0
+min_val=0
 for i in range(len(impedance_mean_array)):
     impedance_mean=impedance_mean_array[i]
     ref_freq=ref_freq_array[i]
     plot_impedance_trace(impedance_mean,ref_freq,moving_avg_wind,0,sharpness_thr,filtered_method,False)
     max_val=max(max_val,np.max(impedance_mean))
-plt.gca().set_ylim(top=max_val/1e6)
+
+#set color for the first line
+plt.gca().get_lines()[0].set_color("red")
+#set color for the second line
+plt.gca().get_lines()[1].set_color("blue")
+#change the title
+#plt.gca().set_title('test')
+plt.gca().set_ylim([0,max_val/1e6])
+plt.gca().set_xlim([0,20])
+#switch this appropriately if you notice the label is flipped
 plt.legend(['Resonance','No Resonance'])
 
     
