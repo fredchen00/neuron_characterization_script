@@ -220,12 +220,10 @@ data_file_path=params['data_file_path']
 sweep_end_freq=params['sweep_end_freq']
 moving_avg_wind=params['moving_avg_wind']
 root_result_folder=params['root_result_folder']
-is_sharpness_filter=params['is_resonance_filter']
 sharpness_thr=params['sharpness_thr']
 filtered_method=params['filtered_method']
 
-if not(is_sharpness_filter):
-    is_sharpness_filter=0
+
 
 root_result_path=os.path.join(data_file_path,root_result_folder)
 #generating directory to save results
@@ -310,11 +308,17 @@ for folder_path in folder_list:
 plt.figure()
 max_val=0
 min_val=0
-for i in range(len(impedance_mean_array)):
-    impedance_mean=impedance_mean_array[i]
-    ref_freq=ref_freq_array[i]
-    plot_impedance_trace(impedance_mean,ref_freq,moving_avg_wind,0,sharpness_thr,filtered_method,False)
-    max_val=max(max_val,np.max(impedance_mean))
+sheet_name=['Resonance','No Resonance']
+with pd.ExcelWriter(os.path.join(root_imped_fig_path,'impedance_raw.xlsx'), engine='xlsxwriter') as writer:
+    for i in range(len(impedance_mean_array)):
+        impedance_mean=impedance_mean_array[i]
+        ref_freq=ref_freq_array[i]
+        plot_impedance_trace(impedance_mean,ref_freq,moving_avg_wind,0,sharpness_thr,filtered_method,False)
+        max_val=max(max_val,np.max(impedance_mean))
+        ## convert your array into a dataframe
+        df = pd.DataFrame(np.vstack((impedance_mean,ref_freq)))
+        df.to_excel(writer,sheet_name=sheet_name[i])
+    
 
 #set color for the first line
 plt.gca().get_lines()[0].set_color("red")
@@ -327,7 +331,7 @@ plt.gca().set_xlim([0,20])
 #switch this appropriately if you notice the label is flipped
 plt.legend(['Resonance','No Resonance'])
 
-    
+
         
 with pd.ExcelWriter(os.path.join(root_imped_fig_path,'impedance_info.xlsx'), engine='xlsxwriter') as writer:
     for i in range(len(df_array)):
